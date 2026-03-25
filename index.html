@@ -366,6 +366,42 @@
 <body>
 
 <div class="container">
+    <div id="authSection" class="card">
+    <div id="loginFields">
+        <h2 class="card-title">🔐 Login to Sync Data</h2>
+        <div class="input-row">
+            <input type="email" id="authEmail" placeholder="Email">
+            <input type="password" id="authPass" placeholder="Password">
+        </div>
+        <div class="input-row" style="margin-top:10px;">
+            <button id="loginBtn" class="btn green">Login</button>
+            <button id="signupBtn" class="btn">Create Account</button>
+        </div>
+    </div>
+
+    <div id="userProfile" style="display:none;">
+        <div class="card-title">
+            <span>👤 Welcome, <span id="userDispName">User</span></span>
+            <button id="logoutBtn" class="btn red" style="padding:4px 8px; font-size:11px;">Logout</button>
+        </div>
+        
+        <div class="input-group">
+            <label>Select Character:</label>
+            <select id="charSelect">
+                <option value="default">Default Settings</option>
+            </select>
+        </div>
+        
+        <button id="addNewCharBtn" class="btn" style="width:100%; margin-top:5px; font-size:12px;">+ Add New Character (ID)</button>
+        
+        <div id="charModal" style="display:none; background: var(--bg); border:1px solid var(--border); padding:10px; margin-top:10px; border-radius:8px;">
+            <input type="text" id="newCharId" placeholder="Character ID" style="margin-bottom:5px;">
+            <input type="text" id="newCharName" placeholder="Character Name" style="margin-bottom:5px;">
+            <input type="number" id="newCharFurnace" placeholder="Furnace Level" style="margin-bottom:5px;">
+            <button id="saveNewChar" class="btn green" style="width:100%;">Save Character</button>
+        </div>
+    </div>
+</div>
     <div class="card" style="padding: 10px 20px;">
         <div class="input-group" style="margin: 0; flex-direction: row; align-items: center; justify-content: space-between;">
             <label style="margin: 0;" data-i18n="lang_label">Language / اللغة:</label>
@@ -1242,12 +1278,10 @@ function loadSettings(manualLoad) {
 window.onload = init;
 
 <script type="module">
-  // 1. استيراد المكتبات اللازمة
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-store.js";
+  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, query, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-  // 2. إعدادات مشروعك (اللي إنت بعتها)
   const firebaseConfig = {
     apiKey: "AIzaSyAoUrNVs1Fm8rPZqelg-HjpEstqUOUypVw",
     authDomain: "wos-bh-cacl.firebaseapp.com",
@@ -1257,13 +1291,79 @@ window.onload = init;
     appId: "1:1075524563532:web:3dedf28e1b909d9884fae9"
   };
 
-  // 3. تشغيل الخدمة
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
 
-  // كدا الأداة بقت "متصلة" بسيرفرات جوجل
-  console.log("Firebase is ready!");
+  // --- عناصر الواجهة ---
+  const loginFields = document.getElementById('loginFields');
+  const userProfile = document.getElementById('userProfile');
+  const charSelect = document.getElementById('charSelect');
+
+  // --- تسجيل الدخول وإنشاء الحساب ---
+  document.getElementById('signupBtn').onclick = () => {
+    const email = document.getElementById('authEmail').value;
+    const pass = document.getElementById('authPass').value;
+    createUserWithEmailAndPassword(auth, email, pass).catch(err => alert(err.message));
+  };
+
+  document.getElementById('loginBtn').onclick = () => {
+    const email = document.getElementById('authEmail').value;
+    const pass = document.getElementById('authPass').value;
+    signInWithEmailAndPassword(auth, email, pass).catch(err => alert(err.message));
+  };
+
+  document.getElementById('logoutBtn').onclick = () => signOut(auth);
+
+  // --- مراقبة حالة المستخدم (هل هو مسجل أم لا؟) ---
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      loginFields.style.display = 'none';
+      userProfile.style.display = 'block';
+      document.getElementById('userDispName').innerText = user.email.split('@')[0];
+      loadCharacters(user.uid); // جلب الشخصيات من السيرفر
+    } else {
+      loginFields.style.display = 'block';
+      userProfile.style.display = 'none';
+    }
+  });
+
+  // --- إدارة الشخصيات ---
+  document.getElementById('addNewCharBtn').onclick = () => {
+    document.getElementById('charModal').style.display = 'block';
+  };
+
+  document.getElementById('saveNewChar').onclick = async () => {
+    const user = auth.currentUser;
+    const id = document.getElementById('newCharId').value;
+    const name = document.getElementById('newCharName').value;
+    const furnace = document.getElementById('newCharFurnace').value;
+
+    if(!id || !name) return alert("Please fill ID and Name");
+
+    await setDoc(doc(db, "users", user.uid, "characters", id), {
+      charId: id,
+      charName: name,
+      furnaceLevel: furnace,
+      settings: {} // هنا هنحفظ أرقام الـ Troops بعدين
+    });
+
+    document.getElementById('charModal').style.display = 'none';
+    loadCharacters(user.uid);
+  };
+
+  async function loadCharacters(uid) {
+    const q = query(collection(db, "users", uid, "characters"));
+    const querySnapshot = await getDocs(q);
+    charSelect.innerHTML = '<option value="default">Choose Character</option>';
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      const opt = document.createElement('option');
+      opt.value = doc.id;
+      opt.innerText = `${data.charName} (ID: ${data.charId})`;
+      charSelect.appendChild(opt);
+    });
+  }
 </script>
 </body>
 </html>

@@ -1241,6 +1241,29 @@ function loadSettings(manualLoad) {
 // Initialize tool
 window.onload = init;
 
+<script type="module">
+  // 1. استيراد المكتبات اللازمة
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-store.js";
+
+  // 2. إعدادات مشروعك (اللي إنت بعتها)
+  const firebaseConfig = {
+    apiKey: "AIzaSyAoUrNVs1Fm8rPZqelg-HjpEstqUOUypVw",
+    authDomain: "wos-bh-cacl.firebaseapp.com",
+    projectId: "wos-bh-cacl",
+    storageBucket: "wos-bh-cacl.firebasestorage.app",
+    messagingSenderId: "1075524563532",
+    appId: "1:1075524563532:web:3dedf28e1b909d9884fae9"
+  };
+
+  // 3. تشغيل الخدمة
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // كدا الأداة بقت "متصلة" بسيرفرات جوجل
+  console.log("Firebase is ready!");
 </script>
 </body>
 </html>

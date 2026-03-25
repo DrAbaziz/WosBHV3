@@ -1211,7 +1211,9 @@ function updateUI() {
         wList.innerHTML = '';
     }
 
-    saveSettings();
+// إضافة السطر ده في آخر دالة updateUI
+if (typeof syncCharacterData === 'function') {
+    syncCharacterData();
 }
 
 function saveSettings() {
@@ -1280,7 +1282,7 @@ window.onload = init;
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, collection, query, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, query, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAoUrNVs1Fm8rPZqelg-HjpEstqUOUypVw",
@@ -1295,16 +1297,15 @@ window.onload = init;
   const auth = getAuth(app);
   const db = getFirestore(app);
 
-  // --- عناصر الواجهة ---
   const loginFields = document.getElementById('loginFields');
   const userProfile = document.getElementById('userProfile');
   const charSelect = document.getElementById('charSelect');
 
-  // --- تسجيل الدخول وإنشاء الحساب ---
+  // --- 1. نظام التسجيل ---
   document.getElementById('signupBtn').onclick = () => {
     const email = document.getElementById('authEmail').value;
     const pass = document.getElementById('authPass').value;
-    createUserWithEmailAndPassword(auth, email, pass).catch(err => alert(err.message));
+    createUserWithEmailAndPassword(auth, email, pass).then(() => alert("Account Created!")).catch(err => alert(err.message));
   };
 
   document.getElementById('loginBtn').onclick = () => {
@@ -1313,22 +1314,59 @@ window.onload = init;
     signInWithEmailAndPassword(auth, email, pass).catch(err => alert(err.message));
   };
 
-  document.getElementById('logoutBtn').onclick = () => signOut(auth);
+  document.getElementById('logoutBtn').onclick = () => signOut(auth).then(() => location.reload());
 
-  // --- مراقبة حالة المستخدم (هل هو مسجل أم لا؟) ---
+  // --- 2. مراقبة حالة المستخدم ---
   onAuthStateChanged(auth, (user) => {
     if (user) {
       loginFields.style.display = 'none';
       userProfile.style.display = 'block';
       document.getElementById('userDispName').innerText = user.email.split('@')[0];
-      loadCharacters(user.uid); // جلب الشخصيات من السيرفر
-    } else {
-      loginFields.style.display = 'block';
-      userProfile.style.display = 'none';
+      loadCharacters(user.uid);
     }
   });
 
-  // --- إدارة الشخصيات ---
+  // --- 3. حفظ بيانات الشخصية (الأرقام) ---
+  // الدالة دي هنناديها كل ما المستخدم يغير رقم في الحاسبة
+  window.syncCharacterData = async () => {
+    const user = auth.currentUser;
+    const charId = charSelect.value;
+    if (user && charId !== 'default') {
+      const charRef = doc(db, "users", user.uid, "characters", charId);
+      const currentData = {
+        infTotal: document.getElementById('infTotal').value,
+        lanTotal: document.getElementById('lanTotal').value,
+        markTotal: document.getElementById('markTotal').value,
+        baseCap: document.getElementById('baseCap').value,
+        furnaceLevel: document.getElementById('newCharFurnace').value // اختياري
+      };
+      await updateDoc(charRef, { settings: currentData });
+      console.log("Data synced to Firebase!");
+    }
+  };
+
+  // --- 4. جلب بيانات الشخصية عند اختيارها ---
+  charSelect.onchange = async () => {
+    const user = auth.currentUser;
+    const charId = charSelect.value;
+    if (user && charId !== 'default') {
+      const charRef = doc(db, "users", user.uid, "characters", charId);
+      const snap = await getDoc(charRef);
+      if (snap.exists() && snap.data().settings) {
+        const settings = snap.data().settings;
+        // تحديث الخانات في الحاسبة
+        if(settings.infTotal) document.getElementById('infTotal').value = settings.infTotal;
+        if(settings.lanTotal) document.getElementById('lanTotal').value = settings.lanTotal;
+        if(settings.markTotal) document.getElementById('markTotal').value = settings.markTotal;
+        if(settings.baseCap) document.getElementById('baseCap').value = settings.baseCap;
+        
+        // إعادة تشغيل الحسابات لتحديث النتائج
+        if (window.updateUI) window.updateUI(); 
+      }
+    }
+  };
+
+  // --- 5. إدارة إضافة الشخصيات الجديدة ---
   document.getElementById('addNewCharBtn').onclick = () => {
     document.getElementById('charModal').style.display = 'block';
   };
@@ -1345,7 +1383,11 @@ window.onload = init;
       charId: id,
       charName: name,
       furnaceLevel: furnace,
-      settings: {} // هنا هنحفظ أرقام الـ Troops بعدين
+      settings: {
+        infTotal: document.getElementById('infTotal').value,
+        lanTotal: document.getElementById('lanTotal').value,
+        markTotal: document.getElementById('markTotal').value
+      }
     });
 
     document.getElementById('charModal').style.display = 'none';
@@ -1360,10 +1402,16 @@ window.onload = init;
       const data = doc.data();
       const opt = document.createElement('option');
       opt.value = doc.id;
-      opt.innerText = `${data.charName} (ID: ${data.charId})`;
+      opt.innerText = `${data.charName} (Level: ${data.furnaceLevel})`;
       charSelect.appendChild(opt);
     });
   }
+
+  // ربط الأرقام بالحفظ التلقائي
+  document.querySelectorAll('input').forEach(input => {
+    input.addEventListener('change', window.syncCharacterData);
+  });
+
 </script>
 </body>
 </html>
